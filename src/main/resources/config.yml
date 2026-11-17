@@ -1,0 +1,9 @@
+# LumiView module toggles
+shelves: true
+placed-items: true
+hover-labels: true
+dropped-items: true
+furnaces: true
+brewing-stands: true
+workstations: true
+world-displays: true

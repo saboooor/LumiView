@@ -1,4 +1,4 @@
-package io.github.saboooor.shelfview;
+package io.github.saboooor.lumiview;
 
 import java.util.ArrayList;
 import java.util.List;

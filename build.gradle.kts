@@ -9,11 +9,14 @@ val pluginVersion = version.toString()
 repositories {
     mavenCentral()
     maven("https://repo.papermc.io/repository/maven-public/")
+    maven("https://repo.codemc.io/repository/maven-public/")
 }
 
 dependencies {
     compileOnly("io.papermc.paper:paper-api:26.3.build.178-stable")
+    compileOnly("com.github.retrooper:packetevents-spigot:2.14.0")
     testImplementation("io.papermc.paper:paper-api:26.3.build.178-stable")
+    testImplementation("com.github.retrooper:packetevents-spigot:2.14.0")
     testImplementation("org.junit.jupiter:junit-jupiter:5.11.4")
     testImplementation("org.mockito:mockito-core:5.23.0")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")

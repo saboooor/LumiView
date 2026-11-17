@@ -1,6 +1,16 @@
-name: ShelfView
+name: LumiView
 version: '${version}'
-main: io.github.saboooor.shelfview.ShelfViewPlugin
+main: io.github.saboooor.lumiview.LumiViewPlugin
 api-version: '26.3'
-description: Native shelf previews for the chest directly behind them.
+depend: [packetevents]
+description: Container shelf previews, placeable items, and client-side holograms.
 author: saboooor
+commands:
+  lumiview:
+    description: Toggle LumiView client-side holograms and item previews.
+    usage: /lumiview toggle
+    permission: lumiview.toggle
+permissions:
+  lumiview.toggle:
+    description: Allows toggling personal LumiView holograms.
+    default: true
