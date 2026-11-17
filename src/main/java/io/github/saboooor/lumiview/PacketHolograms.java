@@ -27,6 +27,7 @@ import org.bukkit.inventory.ItemStack;
 /** Client-side text display holograms dispatched through PacketEvents. */
 final class PacketHolograms {
     private static final int INDEX_NO_GRAVITY = 5;
+    private static final int INDEX_POS_ROT_INTERPOLATION_DURATION = 10;
     private static final int INDEX_TRANSLATION = 11;
     private static final int INDEX_SCALE = 12;
     private static final int INDEX_BILLBOARD = 15;
@@ -69,6 +70,9 @@ final class PacketHolograms {
 
         void spawnItem(Player player, int entityId, UUID uuid, Location location,
                 ItemStack item, float scale, Display.Billboard billboard);
+
+        void animateItem(Player player, int entityId, UUID uuid, Location from, Location to,
+                ItemStack item, float scale, int interpolationTicks);
 
         void mount(Player player, int vehicleId, int... passengerIds);
 
@@ -131,6 +135,29 @@ final class PacketHolograms {
             var manager = PacketEvents.getAPI().getPlayerManager();
             manager.sendPacket(player, spawn);
             manager.sendPacket(player, new WrapperPlayServerEntityMetadata(entityId, metadata));
+        }
+
+        @Override
+        public void animateItem(Player player, int entityId, UUID uuid, Location from, Location to,
+                ItemStack item, float scale, int interpolationTicks) {
+            if (!player.isOnline()) return;
+            var peFrom = SpigotConversionUtil.fromBukkitLocation(from);
+            var peTo = SpigotConversionUtil.fromBukkitLocation(to);
+            var spawn = new WrapperPlayServerSpawnEntity(
+                    entityId, uuid, EntityTypes.ITEM_DISPLAY, peFrom, 0f, 0, null);
+            List<EntityData<?>> metadata = List.of(
+                    new EntityData<>(INDEX_NO_GRAVITY, EntityDataTypes.BOOLEAN, true),
+                    new EntityData<>(INDEX_POS_ROT_INTERPOLATION_DURATION, EntityDataTypes.INT, interpolationTicks),
+                    new EntityData<>(INDEX_SCALE, EntityDataTypes.VECTOR3F, new Vector3f(scale, scale, scale)),
+                    new EntityData<>(INDEX_BILLBOARD, EntityDataTypes.BYTE, (byte) Display.Billboard.CENTER.ordinal()),
+                    new EntityData<>(INDEX_BRIGHTNESS, EntityDataTypes.INT, FULL_BRIGHTNESS),
+                    new EntityData<>(INDEX_ITEM_STACK, EntityDataTypes.ITEMSTACK, SpigotConversionUtil.fromBukkitItemStack(item)),
+                    new EntityData<>(INDEX_ITEM_DISPLAY_TYPE, EntityDataTypes.BYTE, ITEM_DISPLAY_FIXED)
+            );
+            var manager = PacketEvents.getAPI().getPlayerManager();
+            manager.sendPacket(player, spawn);
+            manager.sendPacket(player, new WrapperPlayServerEntityMetadata(entityId, metadata));
+            manager.sendPacket(player, new WrapperPlayServerEntityTeleport(entityId, peTo, false));
         }
 
         @Override

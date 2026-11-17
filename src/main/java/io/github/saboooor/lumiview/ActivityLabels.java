@@ -1,8 +1,10 @@
 package io.github.saboooor.lumiview;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
@@ -29,22 +31,23 @@ import org.bukkit.event.block.BlockDispenseEvent;
 import org.bukkit.event.block.NotePlayEvent;
 import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.inventory.InventoryMoveItemEvent;
-import org.bukkit.event.inventory.InventoryType;
 import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
 
-/** Transient client-side holograms and item pop previews for block and workstation activity. */
+/** Transient client-side holograms and item in/out animations for block and workstation activity. */
 final class ActivityLabels implements Listener {
     static final double RANGE = 12;
     static final int BACKGROUND_ARGB = Color.fromARGB(75, 0, 0, 0).asARGB();
     static final float TEXT_SCALE = .26f;
     static final float ITEM_SCALE = .24f;
-    static final float POP_SCALE = .32f;
+    static final float ANIMATION_SCALE = .26f;
+    static final int ANIMATION_TICKS = 6;
 
     private final LumiViewPlugin plugin;
     private final PacketHolograms.Sender sender;
     private final Map<Location, Transient> active = new HashMap<>();
+    private final List<Transient> animations = new ArrayList<>();
     private final Map<Location, Long> transferCooldowns = new HashMap<>();
     private long tick;
 
@@ -161,15 +164,49 @@ final class ActivityLabels implements Listener {
     }
 
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
-    public void onWorkstationResultClick(InventoryClickEvent event) {
-        Inventory clicked = event.getClickedInventory();
-        if (clicked == null || event.getSlotType() != InventoryType.SlotType.RESULT) return;
-        ItemStack result = event.getCurrentItem();
-        if (result == null || result.isEmpty()) return;
-        Location loc = clicked.getLocation();
+    public void onInventoryClick(InventoryClickEvent event) {
+        if (!(event.getWhoClicked() instanceof Player player)) return;
+        Inventory top = event.getView().getTopInventory();
+        Location loc = top.getLocation();
         if (loc == null || loc.getWorld() == null) return;
-        Location key = loc.toBlockLocation();
-        showItem(key, key.clone().add(.5, 1.48, .5), result, POP_SCALE, 18);
+        Location blockCenter = loc.toBlockLocation().add(.5, 1.0, .5);
+        Location playerHand = player.getLocation().add(0, 1.1, 0);
+        Inventory clicked = event.getClickedInventory();
+        if (clicked == null) return;
+
+        if (clicked.equals(top)) {
+            ItemStack current = event.getCurrentItem();
+            if (current != null && !current.isEmpty()) {
+                animateItem(loc.toBlockLocation(), blockCenter, playerHand, current, ANIMATION_SCALE, ANIMATION_TICKS);
+            }
+            ItemStack cursor = event.getCursor();
+            if (!cursor.isEmpty()) {
+                animateItem(loc.toBlockLocation(), playerHand, blockCenter, cursor, ANIMATION_SCALE, ANIMATION_TICKS);
+            }
+        } else if (event.isShiftClick()) {
+            ItemStack current = event.getCurrentItem();
+            if (current != null && !current.isEmpty()) {
+                animateItem(loc.toBlockLocation(), playerHand, blockCenter, current, ANIMATION_SCALE, ANIMATION_TICKS);
+            }
+        }
+    }
+
+    void animateItem(Location key, Location from, Location to, ItemStack item, float scale, int interpolationTicks) {
+        if (key.getWorld() == null || !key.getWorld().isChunkLoaded(key.getBlockX() >> 4, key.getBlockZ() >> 4)) return;
+        ItemStack snapshot = item.clone();
+        int entityId = sender.nextEntityId();
+        UUID uuid = UUID.randomUUID();
+        Transient entry = new Transient(key, entityId, tick + interpolationTicks + 2);
+        long chunkKey = Chunk.getChunkKey(key.getBlockX() >> 4, key.getBlockZ() >> 4);
+        Location center = key.clone().add(.5, 1.0, .5);
+        for (Player player : key.getWorld().getPlayers()) {
+            if (PacketHolograms.isVisible(player) && player.isChunkSent(chunkKey)
+                    && player.getEyeLocation().distanceSquared(center) <= RANGE * RANGE) {
+                entry.viewers.add(player.getUniqueId());
+                sender.animateItem(player, entityId, uuid, from, to, snapshot, scale, interpolationTicks);
+            }
+        }
+        if (!entry.viewers.isEmpty()) animations.add(entry);
     }
 
     void showText(Location key, Location location, Component text, int durationTicks) {
@@ -210,9 +247,13 @@ final class ActivityLabels implements Listener {
 
     void refresh() {
         tick += 2;
-        Iterator<Map.Entry<Location, Transient>> iterator = active.entrySet().iterator();
+        tickList(active.values().iterator());
+        tickList(animations.iterator());
+    }
+
+    private void tickList(Iterator<Transient> iterator) {
         while (iterator.hasNext()) {
-            Transient entry = iterator.next().getValue();
+            Transient entry = iterator.next();
             if (tick >= entry.expiresAt) {
                 entry.destroy(sender);
                 iterator.remove();
@@ -232,6 +273,8 @@ final class ActivityLabels implements Listener {
     void disable() {
         active.values().forEach(entry -> entry.destroy(sender));
         active.clear();
+        animations.forEach(entry -> entry.destroy(sender));
+        animations.clear();
         transferCooldowns.clear();
     }
 }

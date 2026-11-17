@@ -14,6 +14,7 @@ import org.bukkit.Note;
 import org.bukkit.World;
 import org.bukkit.entity.Display;
 import org.bukkit.entity.Player;
+import org.bukkit.inventory.ItemStack;
 import org.junit.jupiter.api.Test;
 
 class ActivityLabelsTest {
@@ -60,6 +61,44 @@ class ActivityLabelsTest {
 
             labels.refresh(); // tick 4 >= 4: expired
             verify(sender).destroy(same(viewer), eq(70));
+        }
+    }
+
+    @Test
+    void animatesItemInAndOutAndCleansUpAfterInterpolation() {
+        PacketHolograms.Sender sender = mock(PacketHolograms.Sender.class);
+        when(sender.nextEntityId()).thenReturn(71);
+        ActivityLabels labels = new ActivityLabels(null, sender);
+
+        World world = mock(World.class);
+        Location key = new Location(world, 3, 64, 5);
+        Location from = key.clone().add(.5, 1.0, .5);
+        Location to = new Location(world, 4.0, 65.1, 6.0);
+        when(world.isChunkLoaded(0, 0)).thenReturn(true);
+        long chunkKey = Chunk.getChunkKey(0, 0);
+
+        Player viewer = mock(Player.class);
+        UUID viewerId = UUID.randomUUID();
+        when(viewer.getUniqueId()).thenReturn(viewerId);
+        when(viewer.isChunkSent(chunkKey)).thenReturn(true);
+        when(viewer.getEyeLocation()).thenReturn(new Location(world, 3.5, 65.5, 7.0));
+        when(world.getPlayers()).thenReturn(List.of(viewer));
+
+        ItemStack stack = mock(ItemStack.class);
+        when(stack.clone()).thenReturn(stack);
+
+        try (var bukkit = mockStatic(Bukkit.class)) {
+            bukkit.when(() -> Bukkit.getPlayer(viewerId)).thenReturn(viewer);
+
+            labels.animateItem(key, from, to, stack, ActivityLabels.ANIMATION_SCALE, 6);
+            verify(sender).animateItem(same(viewer), eq(71), any(UUID.class), eq(from), eq(to),
+                    same(stack), eq(ActivityLabels.ANIMATION_SCALE), eq(6));
+
+            for (int i = 0; i < 3; i++) labels.refresh(); // ticks 2, 4, 6 < 8
+            verify(sender, never()).destroy(any(), anyInt());
+
+            labels.refresh(); // tick 8 >= 8: expired
+            verify(sender).destroy(same(viewer), eq(71));
         }
     }
 }
